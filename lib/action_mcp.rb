@@ -13,6 +13,14 @@ require "action_mcp/log_subscriber"
 require "action_mcp/engine"
 require "zeitwerk"
 
+unless SecureRandom.respond_to?(:uuid_v7)
+  module SecureRandom
+    def self.uuid_v7
+      uuid
+    end
+  end
+end
+
 
 lib = File.dirname(__FILE__)
 
