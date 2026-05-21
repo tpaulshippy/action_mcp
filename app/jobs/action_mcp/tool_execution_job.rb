@@ -4,7 +4,7 @@ module ActionMCP
   # ActiveJob for executing tools asynchronously in task-augmented mode
   # Part of MCP 2025-11-25 Tasks specification with ActiveJob::Continuable support
   class ToolExecutionJob < ActiveJob::Base
-    include ActiveJob::Continuable
+    include ActiveJob::Continuable if defined?(ActiveJob::Continuable)
 
     queue_as :mcp_tasks
 
@@ -21,22 +21,32 @@ module ActionMCP
     # @param arguments [Hash] Tool arguments
     # @param meta [Hash] Request metadata
     def perform(task_id, tool_name, arguments, meta = {})
-      @task = step(:load_task, task_id)
+      @task = run_step(:load_task, task_id)
       return if @task.nil? || @task.terminal?
 
-      @session = step(:validate_session, @task)
+      @session = run_step(:validate_session, @task)
       return unless @session
 
-      @tool = step(:prepare_tool, @session, tool_name, arguments, @task)
+      @tool = run_step(:prepare_tool, @session, tool_name, arguments, @task)
       return unless @tool
 
-      step(:execute_tool) do
+      run_step(:execute_tool) do
         result = execute_with_reloader(@tool, @session)
         update_task_result(@task, result)
       end
     end
 
     private
+
+    def run_step(step_name, *args, &block)
+      if defined?(ActiveJob::Continuable)
+        step(step_name, *args, &block)
+      elsif block
+        block.call
+      else
+        public_send(step_name, *args)
+      end
+    end
 
     def load_task(task_id)
       task = Session::Task.find_by(id: task_id)
